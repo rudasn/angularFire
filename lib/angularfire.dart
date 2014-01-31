@@ -9,28 +9,31 @@ import 'package:firebase/firebase.dart';
  */
 class FirebaseModule extends Module {
   FirebaseModule() {
-    type(AngularFire)
-    factory(Firebase, (injector) => new Firebase(injector.get(FirebaseUrl).url));
-    // this shoud be everidden in application module
-    type(FirebaseUrl, new FirebaseUrl('...'));
+    type(AngularFire);
   }
 }
 
-class FirebaseUrl {
-  final String url;
-  FirebasUrl(this.url);
+/**
+ * AngularFire service.
+ */
+@NgInjectableService()
+class AngularFire {
+  AngularFire();
+  AngularFireInstance create(Firebase ref) {
+    return new AngularFireInstance(ref);
+  }
 }
 
 /**
  * A particular instance of AngularFire tied to a specific URL.
  */
-class AngularFire {
+class AngularFireInstance {
   Firebase _fRef;
 
   List values;
   List<String> index;
 
-  AngularFire(this._fRef) {
+  AngularFireInstance(this._fRef) {
     this.index = new List();
     this.values = new List();
     this._initialize();
