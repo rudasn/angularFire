@@ -67,8 +67,8 @@ You now have access to the `$firebase` service. You can specify it as a
 dependency in your controllers and services.
 
 ``` js
-myapp.controller("MyController", ["$scope", "$firebase",
-  function($scope, $firebase) {}
+myapp.controller("MyController", ["$firebase",
+   function($firebase) {}
 ]);
 ```
 
@@ -91,11 +91,31 @@ keys. If you'd like a native array ordered by priority instead, please take a
 look at the [orderByPriority](#orderbypriority) filter.
 
 ``` js
-myapp.controller("MyController", ["$scope", "$firebase",
-  function($scope, $firebase) {
-    $scope.items = $firebase(new Firebase(URL));
+myapp.controller("MyController", ["$firebase",
+  function($firebase) {
+     items = $firebase(new Firebase(URL));
+
+     items.$on('loaded', function() {
+        console.log('retrieved data from server!');
+     });
   }
 ]);
+```
+
+To access the data from the DOM or in directives like `ng-repeat`, place it in `scope`.
+You can use `$getReadOnlyArray()` to convert the data to an array if you plan to use
+filters in your directive:
+
+``` js
+myapp.controller("MyController", ["$firebase",
+  function($firebase) {
+     $scope.items = $firebase(new Firebase(URL));
+  }
+]);
+```
+
+``` html
+<li ng-repeat="item in items.$getReadOnlyArray() | filter:name">{{item|json}}</li>
 ```
 
 ### $add(value)
@@ -105,7 +125,7 @@ value as a member of a list (ordered in chronological order). This is the
 equivalent of calling `push(value)` on a Firebase reference.
 
 ``` js
-$scope.items.$add({foo: "bar"});
+items.$add({foo: "bar"});
 ```
 
 This method returns a promise that will be fulfilled when the data has
@@ -113,7 +133,7 @@ been saved to the server. The promise will be resolved with a Firebase
 reference, from which you can extract the key name of the newly added data.
 
 ``` js
-$scope.items.$add({baz: "boo"}).then(function(ref) {
+items.$add({baz: "boo"}).then(function(ref) {
   ref.name();                // Key name of the added data.
 });
 ```
@@ -125,8 +145,8 @@ provided, this method will remove the child referenced by that key. If no
 key is provided, the entire object will be removed remotely.
 
 ``` js
-$scope.items.$remove("foo"); // Removes child named "foo".
-$scope.items.$remove();      // Removes the entire object.
+items.$remove("foo"); // Removes child named "foo".
+items.$remove();      // Removes the entire object.
 ```
 
 This method returns a promise which will be resolved when the data has
@@ -141,8 +161,8 @@ made to this object will be persisted to Firebase. This operation is commonly
 used to save any local changes made to the model.
 
 ``` js
-$scope.items.foo = "baz";
-$scope.items.$save("foo");  // new Firebase(URL + "/foo") now contains "baz".
+items.foo = "baz";
+items.$save("foo");  // new Firebase(URL + "/foo") now contains "baz".
 ```
 
 This method returns a promise which will be resolved when the data has been
@@ -151,10 +171,13 @@ successfully saved on the server.
 ### $child(key)
 
 Creates a new `$firebase` object for a child referenced by the provided key.
+This is only useful for some special cases and creates some overhead.
+Generally, you should simply modify the child data directly on the parent
+reference since that is already synchronized to the server.
 
 ``` js
-var child = $scope.items.$child("foo");
-child.$remove();            // Same as calling $scope.items.$remove("foo");
+var child = items.$child("foo");
+child.$remove();            // Same as calling items.$remove("foo");
 ```
 
 ### $set(value)
@@ -163,7 +186,7 @@ Overwrites the remote value for this object to `newValue`. The local object
 will also be subsequently updated to this new value.
 
 ``` js
-$scope.items.$set({bar: "baz"});  // new Firebase(URL + "/foo") is now null.
+items.$set({bar: "baz"});  // new Firebase(URL + "/foo") is now null.
 ```
 
 This method returns a promise which will be resolved when the data has been
@@ -176,8 +199,8 @@ The keys specified in `value` will be updated, but all other values will
 remain untouched. This is the equivalent of calling `update(value)` on a Firebase reference.
 
 ``` js
-$scope.items.$set({foo: "bar", baz: "boo"});
-$scope.items.$update({baz: "fizz"});  // The data is now {foo: "bar", baz: "fizz"}.
+items.$set({foo: "bar", baz: "boo"});
+items.$update({baz: "fizz"});  // The data is now {foo: "bar", baz: "fizz"}.
 ```
 
 This method returns a promise which will be resolved when the data has been
@@ -226,24 +249,140 @@ $scope.messageCount.$transaction(function(currentCount) {
 
 Returns an ordered list of keys in the data object, sorted by their Firebase priorities.
 If you're looking for a quick way to convert the items to a sorted array for use in tools
-like `ng-repeat`, see the [orderByPriority](#orderbypriority) filter.
+like `ng-repeat`, see [$getReadOnlyArray](#firebase-getreadonlyarray) filter.
 
 ``` js
-var keys = $scope.items.$getIndex();
+var keys = items.$getIndex();
 keys.forEach(function(key, i) {
-  console.log(i, $scope.items[key]); // Prints items in order they appear in Firebase.
+  console.log(i, items[key]); // Prints items in order they appear in Firebase.
 });
- ```
+```
 
-Priorities
-----------
+### $priority
+
 The Firebase priority of an object is provided (if available) as the
 `$priority` field. Changing its value, and calling `$save` will also result
 in the priority value being persisted in Firebase.
 
 ``` js
-$scope.items.foo.$priority = 20;
-$scope.items.$save("foo");  // new Firebase(URL + "foo")'s priority is now 20.
+items.foo.$priority = 20;
+items.$save("foo");  // new Firebase(URL + "foo")'s priority is now 20.
+```
+
+Array Functions
+---------------
+
+### $firebase.$getReadOnlyArray()
+
+Returns an Array which can be sorted, iterated,
+and will be updated whenever the master data is changed. This is a read-only
+array and is controlled by $firebase, so updates made directly to the array
+(e.g. push(), unshift(), pop(), splice(), or list[x] = y) will be lost
+during the next update.
+
+``` js
+var items = $firebase(ref);
+
+var list = items.$getReadOnlyArray();
+angular.forEach(list, function(nextItem) {
+    /* process items in order */
+});
+```
+
+To add/remove/update items, call the `$add`/`$remove`/`$update` methods on
+the `firebase` instance.
+
+``` js
+var list = items.$getReadOnlyArray();
+
+var newData = {foo: 'bar'};
+list.indexOf(newData); // -1
+
+items.$add(newData);
+list.indexOf(newData); // >= 0
+```
+
+This can be put directly into `$scope` for working with filters and directives:
+
+``` js
+$scope.list = items.$getReadOnlyArray();
+```
+
+``` html
+<a ng-repeat="item in list | orderBy:sortField | filter:filterText"
+   ng-click="list.$getObject().$remove(item.$id)">
+      {{item.name}}
+</a>
+```
+
+### array.$indexOf(key)
+
+   @param {string|number} key
+   @returns {int} the index or -1 if not found
+
+Returns the numeric array position of an item with the matching `$id` property.
+
+``` js
+// assume data [ "a": {foo: 'bar'}, "b": {hello: 'world'} ]
+var list = items.$getReadOnlyArray();
+list.$indexOf('b')   // returns 1
+list.$indexOf('baz') // returns -1
+```
+
+### array.sort(comparatorFunction)
+
+   @param {Function|boolean} comparatorFunction same as normal Array.prototype.sort (see below for boolean)
+   @returns {ReadOnlyArray} `this` instance
+
+By default, the array elements will be ordered to match the order of the
+remote data (i.e. by `$priority` if it exists, and then by `$id`).
+The `sort()` method works as expected, allowing us to override how our
+local data will be ordered.
+
+``` js
+// assume data [ "a": {count: 5}, "b": {count: 2}, "c": {count: 3} ]
+var list = items.$getReadOnlyArray();
+list.$indexOf('a'); // 0
+
+function countComparator(a,b) {
+   // sort by the count property
+   return a.count === b.count? 0 : (a.count > b.count? 1 : -1);
+}
+
+list.sort(countComparator);
+list.$indexOf('a'); // 2
+```
+
+This updating sorting will be applied to elements that are added or updated
+by the server as well:
+
+``` js
+list.sort(countComparator);
+items.$add({ count: 1 }).then(function(ref) {
+   var newKey = ref.name();
+   list.$indexOf(newKey); // 0
+});
+```
+
+Calling this method with `false` restores the default order so that our
+data matches the remote server ordering again.
+
+``` js
+list.sort(countComparator);
+list.$indexOf('a'); // 2
+list.sort(false);
+list.$indexOf('a'); // 0
+```
+
+### array.$object
+
+Convenience property to access the writable `$firebase` instance used to create this array.
+
+``` js
+var items = $firebase(ref);
+var list = items.$getReadOnlyArray();
+
+list.$object === items; // true!
 ```
 
 Events
@@ -259,10 +398,10 @@ regular Firebase events (such as `child_added` and `value`, see the
 full list), and two additional ones:
 
 ``` js
-$scope.items.$on("loaded", function() {
+items.$on("loaded", function() {
   console.log("Initial data received!");
 });
-$scope.items.$on("change", function() {
+items.$on("change", function() {
   console.log("A remote change was applied locally!");
 });
 ```
@@ -280,10 +419,10 @@ synchronization will be turned off for this entire `$firebase` instance.
 
 ```js
 // Detaches all `loaded` event handlers.
-$scope.items.$off('loaded');
-// Stops synchronization on `$scope.items` completely.
+items.$off('loaded');
+// Stops synchronization on `items` completely.
 function stopSync() {
-  $scope.items.$off();
+  items.$off();
 }
 ```
 
@@ -301,7 +440,7 @@ established, you no longer need to explicitely save data to Firebase (for
 example, by using `$add` or `$save`).
 
 ``` js
-$scope.items.$bind($scope, "remoteItems");
+items.$bind($scope, "remoteItems");
 $scope.remoteItems.bar = "foo";  // new Firebase(URL + "/bar") is now "foo".
 ```
 
@@ -310,33 +449,10 @@ from the server has been received. The promise will be resolved with an
 `unbind` function, which, when called, will disassociate the 3-way binding.
 
 ``` js
-$scope.items.$bind($scope, "remote").then(function(unbind) {
+items.$bind($scope, "remote").then(function(unbind) {
   unbind();
   $scope.remote.bar = "foo";    // No changes have been made to the remote data.
 });
-```
-
-Ordered Data and Arrays
------------------------
-Since `$firebase` always returns a JavaScript object, you may want to convert
-it to an array using the `orderByPriority` filter if the order of items is
-important to you.
-
-### orderByPriority
-
-The `orderByPriority` filter is provided by AngularFire to convert an object
-returned by `$firebase` into an array. The objects in the array are ordered
-by priority (as defined in Firebase). Additionally, each object in the array
-will have a `$id` property defined on it, which will correspond to the key name
-for that object.
-
-``` html
-<ul ng-repeat="item in items | orderByPriority">
-  <li>
-    <input type="text" id="{{item.$id}}" ng-model="item.$priority"/>
-    {{item.name}}
-  </li>
-</ul>
 ```
 
 $firebaseSimpleLogin
