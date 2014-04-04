@@ -310,15 +310,15 @@ $scope.list = items.$getReadOnlyArray();
 
 ``` html
 <a ng-repeat="item in list | orderBy:sortField | filter:filterText"
-   ng-click="list.$getObject().$remove(item.$id)">
+   ng-click="list.$object.$remove(item.$id)">
       {{item.name}}
 </a>
 ```
 
 ### array.$indexOf(key)
 
-   @param {string|number} key
-   @returns {int} the index or -1 if not found
+    @param {string|number} key
+    @returns {int} the index or -1 if not found
 
 Returns the numeric array position of an item with the matching `$id` property.
 
@@ -331,8 +331,8 @@ list.$indexOf('baz') // returns -1
 
 ### array.sort(comparatorFunction)
 
-   @param {Function|boolean} comparatorFunction same as normal Array.prototype.sort (see below for boolean)
-   @returns {ReadOnlyArray} `this` instance
+    @param {Function|boolean} comparatorFunction same as normal Array.prototype.sort (see below for boolean)
+    @returns {ReadOnlyArray} `this` instance
 
 By default, the array elements will be ordered to match the order of the
 remote data (i.e. by `$priority` if it exists, and then by `$id`).
