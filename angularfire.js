@@ -20,15 +20,15 @@
   angular.module("firebase", []).value("Firebase", Firebase);
 
   // Define the `$firebase` service that provides synchronization methods.
-  angular.module("firebase").factory("$firebase", ["$q", "$parse", "$timeout",
-    function($q, $parse, $timeout) {
+  angular.module("firebase").factory("$firebase", ["$q", "$parse", "$timeout", "$rootScope",
+    function($q, $parse, $timeout, $rootScope) {
       // The factory returns an object containing the value of the data at
       // the Firebase location provided, as well as several methods. It
       // takes a single argument:
       //
       //   * `ref`: A Firebase reference. Queries or limits may be applied.
       return function(ref) {
-        var af = new AngularFire($q, $parse, $timeout, ref);
+        var af = new AngularFire($q, $parse, $timeout, $rootScope, ref);
         return af.construct();
       };
     }
@@ -106,10 +106,11 @@
   }
 
   // The `AngularFire` object that implements synchronization.
-  AngularFire = function($q, $parse, $timeout, ref) {
+  AngularFire = function($q, $parse, $timeout, $rootScope, ref) {
     this._q = $q;
     this._parse = $parse;
     this._timeout = $timeout;
+    this._rootScope = $rootScope;
 
     // set to true when $bind is called, this tells us whether we need
     // to synchronize a $scope variable during data change events
@@ -180,21 +181,38 @@
       // object or primitive. The key name can be extracted using `ref.name()`.
       // If the promise fails, it will resolve to an error.
       object.$add = function(item) {
-        var ref;
-        var deferred = self._q.defer();
-
-        function _addCb(err) {
-          if (err) {
-            deferred.reject(err);
-          } else {
-            deferred.resolve(ref);
-          }
+        if (typeof item == "object") {
+          item = self._parseObject(item);
         }
 
-        if (typeof item == "object") {
-          ref = self._fRef.ref().push(self._parseObject(item), _addCb);
+        var deferred = self._q.defer();
+        var promise = deferred.promise;
+        var broadcast = self._sendBroadcast('add', item);
+
+        item = broadcast.value;
+
+        promise.then(function() {
+          self._sendBroadcast('add:end', item);
+        });
+
+        promise.catch(function() {
+          self._sendBroadcast('add:reject', item);
+        });
+
+        if (broadcast.resolve) {
+            deferred.resolve();
+
+        } else if (broadcast.reject) {
+          deferred.reject(broadcast.reject);
+
         } else {
-          ref = self._fRef.ref().push(item, _addCb);
+          self._fRef.ref().push(item, function (err) {
+            if (err) {
+              deferred.reject(err);
+            } else {
+              deferred.resolve(self._fRef.ref());
+            }
+          });
         }
 
         return deferred.promise;
@@ -240,14 +258,38 @@
       // This function returns a promise that will be resolved when the
       // data has been successfully saved to the server.
       object.$set = function(newValue) {
+        newValue = self._parseObject(newValue);
+
         var deferred = self._q.defer();
-        self._fRef.ref().set(self._parseObject(newValue), function(err) {
-          if (err) {
-            deferred.reject(err);
-          } else {
-            deferred.resolve();
-          }
+        var promise = deferred.promise;
+        var broadcast = self._sendBroadcast('set', newValue);
+
+        promise.then(function() {
+          self._sendBroadcast('set:end', broadcast.value);
         });
+
+        promise.catch(function() {
+          self._sendBroadcast('set:reject', broadcast.value);
+        });
+
+        newValue = broadcast.value;
+
+        if (broadcast.resolve) {
+            deferred.resolve();
+
+        } else if (broadcast.reject) {
+          deferred.reject(broadcast.reject);
+
+        } else {
+          self._fRef.ref().set(newValue, function(err) {
+            if (err) {
+              deferred.reject(err);
+            } else {
+              deferred.resolve();
+            }
+          });
+        }
+
         return deferred.promise;
       };
 
@@ -261,15 +303,39 @@
       // This function returns a promise that will be resolved when the data
       // has been successfully saved to the server.
       object.$update = function(newValue) {
+        newValue = self._parseObject(newValue);
+
         var deferred = self._q.defer();
-        self._fRef.ref().update(self._parseObject(newValue), function(err) {
-          if (err) {
-            deferred.reject(err);
-          } else {
-            deferred.resolve();
-          }
+        var promise = deferred.promise;
+        var broadcast = self._sendBroadcast('update', newValue);
+
+        promise.then(function() {
+          self._sendBroadcast('update:end', broadcast.value);
         });
-        return deferred.promise;
+
+        promise.catch(function() {
+          self._sendBroadcast('update:reject', broadcast.value);
+        });
+
+        newValue = broadcast.value;
+
+        if (broadcast.resolve) {
+            deferred.resolve();
+
+        } else if (broadcast.reject) {
+          deferred.reject(broadcast.reject);
+
+        } else {
+          self._fRef.ref().update(newValue, function(err) {
+            if (err) {
+              deferred.reject(err);
+            } else {
+              deferred.resolve();
+            }
+          });
+        }
+
+        return promise;
       };
 
       // Update a value within a transaction. Calling this is the
@@ -307,7 +373,7 @@
             }
           },
         applyLocally);
-        
+
         return deferred.promise;
       };
 
@@ -347,7 +413,7 @@
       //             returned.
       object.$child = function(key) {
         var af = new AngularFire(
-          self._q, self._parse, self._timeout, self._fRef.ref().child(key)
+          self._q, self._parse, self._timeout, self._rootScope, self._fRef.ref().child(key)
         );
         return af.construct();
       };
@@ -551,6 +617,12 @@
     // Called whenever there is a remote change. Applies them to the local
     // model for both explicit and implicit sync modes.
     _updateModel: function(key, value) {
+      var bvalue = {};
+      bvalue[key] = value;
+      var broadcast = this._sendBroadcast('change', bvalue);
+
+      value = broadcast.value[key];
+
       if (value == null) {
         delete this._object[key];
       } else {
@@ -629,6 +701,10 @@
 
       function _wrapTimeout(cb, param) {
         self._timeout(function() {
+          if (param && param.snapshot) {
+            var broadcast = self._sendBroadcast(evt, param.snapshot.value);
+            param.snapshot.value = broadcast.value;
+          }
           cb(param);
         });
       }
@@ -693,6 +769,26 @@
         },
         prevChild: prevChild
       };
+    },
+
+    _sendBroadcast: function(name, value) {
+      name = 'af:' + name;
+      var broadcast = this._makeBroadcast(name, value);
+
+      this._rootScope.$broadcast(name, broadcast);
+
+      return broadcast;
+    },
+
+    _makeBroadcast: function(name, value) {
+      var ref = this._fRef.ref();
+
+      return {
+        name: name,
+        id: ref.name(),
+        ref: ref,
+        value: value
+      }
     },
 
     // This function creates a 3-way binding between the provided scope model
