@@ -187,16 +187,16 @@
 
         var deferred = self._q.defer();
         var promise = deferred.promise;
-        var broadcast = self._sendBroadcast('add', item);
+        var broadcast = self._sendBroadcast("add", item);
 
         item = broadcast.value;
 
         promise.then(function() {
-          self._sendBroadcast('add:end', item);
+          self._sendBroadcast("add:end", item);
         });
 
         promise.catch(function() {
-          self._sendBroadcast('add:reject', item);
+          self._sendBroadcast("add:reject", item);
         });
 
         if (broadcast.resolve) {
@@ -262,14 +262,14 @@
 
         var deferred = self._q.defer();
         var promise = deferred.promise;
-        var broadcast = self._sendBroadcast('set', newValue);
+        var broadcast = self._sendBroadcast("set", newValue);
 
         promise.then(function() {
-          self._sendBroadcast('set:end', broadcast.value);
+          self._sendBroadcast("set:end", broadcast.value);
         });
 
         promise.catch(function() {
-          self._sendBroadcast('set:reject', broadcast.value);
+          self._sendBroadcast("set:reject", broadcast.value);
         });
 
         newValue = broadcast.value;
@@ -307,14 +307,14 @@
 
         var deferred = self._q.defer();
         var promise = deferred.promise;
-        var broadcast = self._sendBroadcast('update', newValue);
+        var broadcast = self._sendBroadcast("update", newValue);
 
         promise.then(function() {
-          self._sendBroadcast('update:end', broadcast.value);
+          self._sendBroadcast("update:end", broadcast.value);
         });
 
         promise.catch(function() {
-          self._sendBroadcast('update:reject', broadcast.value);
+          self._sendBroadcast("update:reject", broadcast.value);
         });
 
         newValue = broadcast.value;
@@ -556,7 +556,7 @@
       });
 
       function _isPrimitive(v) {
-        return v === null || typeof(v) !== 'object';
+        return v === null || typeof(v) !== "object";
       }
 
       function _initialLoad(value) {
@@ -593,7 +593,7 @@
       // child_* listeners attached; if the data suddenly changes between an object
       // and a primitive, the child_added/removed events will fire, and our data here
       // will get updated accordingly so we should be able to transition without issue
-      self._fRef.on('value', function(snap) {
+      self._fRef.on("value", function(snap) {
         // primitive handling
         var value = snap.val();
         if( _isPrimitive(value) ) {
@@ -605,7 +605,7 @@
         }
 
         // broadcast the value event
-        self._broadcastEvent('value', self._makeEventSnapshot(snap.name(), value));
+        self._broadcastEvent("value", self._makeEventSnapshot(snap.name(), value));
 
         // broadcast initial loaded event once data and indices are set up appropriately
         if( !self._loaded ) {
@@ -619,7 +619,7 @@
     _updateModel: function(key, value) {
       var bvalue = {};
       bvalue[key] = value;
-      var broadcast = this._sendBroadcast('change', bvalue);
+      var broadcast = this._sendBroadcast("change", bvalue);
 
       value = broadcast.value[key];
 
@@ -694,7 +694,7 @@
     // If event handlers for a specified event were attached, call them.
     _broadcastEvent: function(evt, param) {
       var cbs = this._on[evt] || [];
-      if( evt === 'loaded' ) {
+      if( evt === "loaded" ) {
         this._on[evt] = []; // release memory
       }
       var self = this;
@@ -721,18 +721,18 @@
     // triggers an initial event for loaded, value, and child_added events (which get immediate feedback)
     _sendInitEvent: function(evt, callback) {
       var self = this;
-      if( self._loaded && ['child_added', 'loaded', 'value'].indexOf(evt) > -1 ) {
+      if( self._loaded && ["child_added", "loaded", "value"].indexOf(evt) > -1 ) {
         self._timeout(function() {
-          var parsedValue = self._object.hasOwnProperty('$value')?
+          var parsedValue = self._object.hasOwnProperty("$value")?
             self._object.$value : self._parseObject(self._object);
           switch(evt) {
-          case 'loaded':
+          case "loaded":
             callback(parsedValue);
             break;
-          case 'value':
+          case "value":
             callback(self._makeEventSnapshot(self._fRef.name(), parsedValue, null));
             break;
-          case 'child_added':
+          case "child_added":
             self._iterateChildren(parsedValue, function(name, val, prev) {
               callback(self._makeEventSnapshot(name, val, prev));
             });
@@ -772,7 +772,7 @@
     },
 
     _sendBroadcast: function(name, value) {
-      name = 'af:' + name;
+      name = "af:" + name;
       var broadcast = this._makeBroadcast(name, value);
 
       this._rootScope.$broadcast(name, broadcast);
@@ -816,9 +816,9 @@
       });
 
       // Once we receive the initial value, the promise will be resolved.
-      self._object.$on('loaded', function(value) {
+      self._object.$on("loaded", function(value) {
         self._timeout(function() {
-          if(value === null && typeof defaultFn === 'function') {
+          if(value === null && typeof defaultFn === "function") {
             scope[name] = defaultFn();
           }
           else {
